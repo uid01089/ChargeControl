@@ -108,6 +108,8 @@ class ChargeControl:
             self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/minCurrent', MIN_CURRENT)
             self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/switchOnCurrent', SWITCH_ON_CURRENT)
             self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/controllerState', self.controllerState.name)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/eGoChargerState', self.model.getStatus().name)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/availablePowerForCharging', self.model.calcAvailablePower())
 
     def calcChargeCurrent(self, prioEssLoading: bool, availableCurrent: int) -> int:
 
@@ -151,7 +153,6 @@ class ChargeControl:
                     if availableCurrentForCharging >= SWITCH_ON_CURRENT:
 
                         self.controllerState = ControllerState.WaitTillChargingStarts
-
                         chargeCurrent = self.schmittTrigger.getFilteredValue(finalCalculatedCurrentForCharging)
 
             elif self.controllerState == ControllerState.WaitTillChargingStarts:
@@ -217,6 +218,8 @@ def main() -> None:
     model = Model(mqttClient)
     analogSchmittTrigger = AnalogSchmittTrigger(1)
     ChargeControl(mqttClient, scheduler, model, analogSchmittTrigger).setup()
+
+    print("ChargeControl running")
 
     while (True):
         scheduler.loop()
