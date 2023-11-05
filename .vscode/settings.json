@@ -1,0 +1,26 @@
+{
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wrappingIndent": "same",
+    "editor.wordWrapColumn": 180,
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.autopep8",
+        "editor.formatOnSave": true,
+    },
+    "autopep8.args": [
+        "--max-line-length",
+        "180",
+        "--experimental",
+        "--aggressive"
+    ],
+    "pylint.args": [
+        "--disable=C0103",
+        "--disable=C0114",
+        "--disable=C0115",
+        "--disable=C0116",
+    ],
+}
