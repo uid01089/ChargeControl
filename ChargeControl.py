@@ -12,6 +12,7 @@ import pathlib
 
 
 import paho.mqtt.client as pahoMqtt
+from PythonLib.JsonUtil import JsonUtil
 from PythonLib.Mqtt import Mqtt
 from PythonLib.Scheduler import Scheduler
 from PythonLib.StringUtil import StringUtil
@@ -34,13 +35,41 @@ class ControllerState (Enum):
     Finished = 4
 
 
+class Module:
+    def __init__(self) -> None:
+        self.scheduler = Scheduler()
+        self.mqttClient = Mqtt("koserver.iot", "/house/agents/ChargeControl", pahoMqtt.Client("ChargeControl"))
+        self.analogSchmittTrigger = AnalogSchmittTrigger(1)
+        self.model: Model = None
+
+    def getAnalogSchmittTrigger(self) -> AnalogSchmittTrigger:
+        return self.analogSchmittTrigger
+
+    def getModel(self) -> Model:
+        if not self.model:
+            self.model = Model(self.mqttClient)
+        return self.model
+
+    def getScheduler(self) -> Scheduler:
+        return self.scheduler
+
+    def getMqttClient(self) -> Mqtt:
+        return self.mqttClient
+
+    def setup(self) -> None:
+        self.scheduler.scheduleEach(self.mqttClient.loop, 500)
+
+    def loop(self) -> None:
+        self.scheduler.loop()
+
+
 class ChargeControl:
 
-    def __init__(self, mqttClient: Mqtt, scheduler: Scheduler, model: Model, schmittTrigger: AnalogSchmittTrigger) -> None:
-        self.mqttClient = mqttClient
-        self.scheduler = scheduler
-        self.model = model
-        self.schmittTrigger = schmittTrigger
+    def __init__(self, module: Module) -> None:
+        self.mqttClient = module.getMqttClient()
+        self.scheduler = module.getScheduler()
+        self.model = module.getModel()
+        self.schmittTrigger = module.getAnalogSchmittTrigger()
 
         self.chargedEnergy3 = None
         self.totalChargedEnergy3 = None
@@ -93,23 +122,26 @@ class ChargeControl:
 
     def __keepAlive(self) -> None:
         self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/heartbeat', DateTimeUtilities.getCurrentDateString())
+        self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/subscriptions', JsonUtil.obj2Json(self.mqttClient.getSubscriptionCatalog()))
 
     def __loop(self) -> None:
         if self.model.isModelConsistent():
             self.control()
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/chargeCurrent', self.chargeCurrent)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/loadingPower1', self.model.getLoadingPower1())
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/loadingPower2', self.model.getLoadingPower2())
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/loadingPower3', self.model.getLoadingPower3())
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/doCharging', self.__isCharging())
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/prioEssLoading', self.prioEssLoading)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/essAccuThreshold', ESS_ACCU_THRESHOLD_PROZ)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/nrPhases', NR_PHASES)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/minCurrent', MIN_CURRENT)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/switchOnCurrent', SWITCH_ON_CURRENT)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/controllerState', self.controllerState.name)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/eGoChargerState', self.model.getStatus().name)
-            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/availablePowerForCharging', self.model.calcAvailablePower())
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/chargeCurrent', self.chargeCurrent)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/loadingPower1', self.model.getLoadingPower1())
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/loadingPower2', self.model.getLoadingPower2())
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/loadingPower3', self.model.getLoadingPower3())
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/doCharging', self.__isCharging())
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/prioEssLoading', self.prioEssLoading)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/essAccuThreshold', ESS_ACCU_THRESHOLD_PROZ)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/nrPhases', NR_PHASES)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/minCurrent', MIN_CURRENT)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/switchOnCurrent', SWITCH_ON_CURRENT)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/controllerStateName', self.controllerState.name)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/eGoChargerStateName', self.model.getStatus().name)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/controllerState', self.controllerState.value)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/eGoChargerState', self.model.getStatus().value)
+            self.mqttClient.publishIndependentTopic('/house/agents/ChargeControl/data/availablePowerForCharging', self.model.calcAvailablePower())
 
     def calcChargeCurrent(self, prioEssLoading: bool, availableCurrent: int) -> int:
 
@@ -210,19 +242,15 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('ChargeControl').setLevel(logging.DEBUG)
 
-    scheduler = Scheduler()
+    module = Module()
+    module.setup()
 
-    mqttClient = Mqtt("koserver.iot", "/house/agents/ChargeControl", pahoMqtt.Client("ChargeControl"))
-    scheduler.scheduleEach(mqttClient.loop, 500)
-
-    model = Model(mqttClient)
-    analogSchmittTrigger = AnalogSchmittTrigger(1)
-    ChargeControl(mqttClient, scheduler, model, analogSchmittTrigger).setup()
+    ChargeControl(module).setup()
 
     print("ChargeControl running")
 
     while (True):
-        scheduler.loop()
+        module.loop()
         time.sleep(0.25)
 
 

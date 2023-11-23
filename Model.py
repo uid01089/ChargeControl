@@ -38,7 +38,7 @@ class Model:
 
     def __receiveLoadPower(self, payload: str) -> None:
         try:
-            self.loadPower = (-1) * int(payload)  # Origin loadPower was negative, but taken directly from Mqtt this has to be multiplied with -1
+            self.loadPower = (-1) * int(float(payload))  # Origin loadPower was negative, but taken directly from Mqtt this has to be multiplied with -1
         except BaseException:
             logging.exception('')
 
