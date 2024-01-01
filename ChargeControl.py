@@ -1,14 +1,10 @@
 from enum import Enum
 import logging
 import time
-from datetime import datetime
-from pathlib import PurePath
+
 from Model import GoEchargerCarStatus, Model
 from PythonLib.AnalogSchmittTrigger import AnalogSchmittTrigger
 from PythonLib.DateUtil import DateTimeUtilities
-
-
-import pathlib
 
 
 import paho.mqtt.client as pahoMqtt

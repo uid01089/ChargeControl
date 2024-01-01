@@ -1,0 +1,9 @@
+.venv
+.vscode
+.git
+.gitmodules
+template
+.pytest_cache
+*.json
+
+
