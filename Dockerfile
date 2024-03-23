@@ -1,4 +1,4 @@
-FROM arm64v8/python:3.10-alpine
+FROM arm64v8/python:3.12-alpine
 
 # Update system
 RUN apk update && apk upgrade
