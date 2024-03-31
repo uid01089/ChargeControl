@@ -34,7 +34,7 @@ class ChargeControl:
 
     def setup(self) -> None:
 
-        self.mqttClient.subscribe('control/AutomaticMode', self.__setMode)
+        self.mqttClient.subscribe('control/AutomaticMode[On,Off]', self.__setMode)
 
         self.scheduler.scheduleEach(self.__keepAlive, 10000)
         self.scheduler.scheduleEach(self.__loop, 60 * 1000)
