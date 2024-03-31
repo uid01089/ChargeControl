@@ -4,6 +4,7 @@ import time
 
 from Context import Context
 from ContextIf import ContextIf
+from PythonLib.StringUtil import StringUtil
 from PythonLib.DateUtil import DateTimeUtilities
 
 
@@ -33,8 +34,6 @@ class ChargeControl:
 
     def setup(self) -> None:
 
-        self.__setMode("false")
-
         self.mqttClient.subscribe('control/AutomaticMode', self.__setMode)
 
         self.scheduler.scheduleEach(self.__keepAlive, 10000)
@@ -58,7 +57,9 @@ class ChargeControl:
 
         match(self.overAllState):
             case OverallChargeControlState.Manuel:
-                pass
+                if self.automaticMode:
+                    self.overAllState = OverallChargeControlState.ChangeIntoPvBased
+
             case OverallChargeControlState.TimeBased:
                 if not self.context.getTimeCharge().isCharging():
                     self.overAllState = OverallChargeControlState.ChangeIntoPvBased
@@ -75,35 +76,42 @@ class ChargeControl:
                     charger = self.context.getPVSurPlusCharge()
 
                     if charger.isCharging():
-                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/Ampere',
+                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/Ampere',
                                                                         str(int(charger.getCurrent())))
-                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/ForceState[Neutral,Off,On]', 'On')
+                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'On')
                     else:
-                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/ForceState[Neutral,Off,On]', 'Off')
+                        self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'Off')
 
             case OverallChargeControlState.ChangeIntoPvBased:
                 self.overAllState = OverallChargeControlState.PvBased
 
                 charger = self.context.getPVSurPlusCharge()
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/PhaseSwitchMode[Auto,Force_1,Force_3]',
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/PhaseSwitchMode[Auto,Force_1,Force_3]',
                                                                 self.__phaseSwitchStr(charger.getNrPhases()))
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/Ampere',
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/Ampere',
                                                                 str(int(charger.getCurrent())))
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/ForceState[Neutral,Off,On]', 'On')
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'On')
+
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/Ess2Mqtt/controlT/setWinter[On,Off]', 'Off')
 
             case OverallChargeControlState.ChangeIntoTimeBased:
                 self.overAllState = OverallChargeControlState.TimeBased
 
                 charger = self.context.getTimeCharge()
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/PhaseSwitchMode[Auto,Force_1,Force_3]',
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/PhaseSwitchMode[Auto,Force_1,Force_3]',
                                                                 self.__phaseSwitchStr(charger.getNrPhases()))
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/Ampere',
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/Ampere',
                                                                 str(int(charger.getCurrent())))
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/ForceState[Neutral,Off,On]', 'Off')
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'Off')
+
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/Ess2Mqtt/controlT/setWinter[On,Off]', 'On')
 
             case OverallChargeControlState.ChangeIntoManuel:
                 self.overAllState = OverallChargeControlState.Manuel
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/controlT/ForceState[Neutral,Off,On]', 'Off')
+
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'Off')
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/Ess2Mqtt/controlT/setWinter[On,Off]', 'Off')
+
             case _:
                 pass
 
@@ -111,6 +119,7 @@ class ChargeControl:
 
     def __setMode(self, payload: str) -> None:
         self.mqttClient.publish('data/AutomaticMode', payload)
+        self.automaticMode = StringUtil.isBoolean(payload)
 
 
 def main() -> None:

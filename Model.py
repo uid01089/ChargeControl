@@ -76,6 +76,9 @@ class Model:
             and self.loadingPowerTotal is not None\
             and self.status is not None
 
+    def whyIsModelConsistent(self) -> str:
+        return f"{self.loadPower}-{self.pcs_pv_total_power}-{self.soc}-{self.loadingPowerTotal}-{self.status}"
+
     def calcAvailablePower(self) -> int:
         availablePowerForLoading = 0
         if self.isModelConsistent():
@@ -91,5 +94,5 @@ class Model:
     def getSoc(self) -> float:
         return self.soc
 
-    def getStatus(self) -> GoEchargerCarStatus:
+    def getEgoChargerCarStatus(self) -> GoEchargerCarStatus:
         return self.status

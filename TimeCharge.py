@@ -20,24 +20,23 @@ class TimeCharge:
         self.mqttClient.subscribe('control/TimeCharge/StartTime', self.__StartTime)
         self.mqttClient.subscribe('control/TimeCharge/EndTime', self.__EndTime)
 
-        self.scheduler.scheduleEach(self.__keepAlive, 60 * 1000)
+        self.scheduler.scheduleEach(self.loop, 60 * 1000)
 
-    def __keepAlive(self) -> None:
+    def loop(self) -> None:
         self.mqttClient.publish('data/TimeCharge/isCharging', self.doCharging)
         self.mqttClient.publish('data/TimeCharge/Time', str(datetime.now()))
         self.mqttClient.publish('data/TimeCharge/Current', self.current)
         self.mqttClient.publish('data/TimeCharge/NrPhases', self.nrPhases)
-
-    def loop(self) -> None:
-        pass
+        self.mqttClient.publish('data/TimeCharge/StartTime', self.startTime)
+        self.mqttClient.publish('data/TimeCharge/EndTime', self.endTime)
 
     def __StartTime(self, payload: str) -> None:
-        self.startTime = datetime.strptime(payload, INPUT_FORMAT)
-        self.mqttClient.publish('data/TimeCharge/StartTime', payload)
+        self.startTime = payload
+        self.mqttClient.publish('data/TimeCharge/StartTime', self.startTime)
 
     def __EndTime(self, payload: str) -> None:
-        self.endTime = datetime.strptime(payload, INPUT_FORMAT)
-        self.mqttClient.publish('data/TimeCharge/EndTime', payload)
+        self.endTime = payload
+        self.mqttClient.publish('data/TimeCharge/EndTime', self.endTime)
 
     def getNrPhases(self) -> int:
         return self.nrPhases
@@ -46,8 +45,15 @@ class TimeCharge:
         return self.current
 
     def isCharging(self) -> bool:
+
         if self.endTime and self.startTime:
-            self.doCharging = self.startTime <= datetime.now() <= self.endTime
-        self.doCharging = False
+
+            startTime = datetime.strptime(self.startTime, INPUT_FORMAT)
+            endTime = datetime.strptime(self.endTime, INPUT_FORMAT)
+
+            self.doCharging = startTime <= datetime.now() <= endTime
+        else:
+
+            self.doCharging = False
 
         return self.doCharging

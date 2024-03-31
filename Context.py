@@ -39,8 +39,6 @@ class Context(ContextIf):
 
     def loop(self) -> None:
         self.scheduler.loop()
-        self.timeCharge.loop()
-        self.pvSurPlusCharge.loop()
 
     def getTimeCharge(self) -> TimeCharge:
         return self.timeCharge

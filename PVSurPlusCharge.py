@@ -29,6 +29,7 @@ class PVSurPlusCharge(Charge):
         self.mqttClient = context.getMqttClient()
         self.model = context.getModel()
         self.schmittTrigger = context.getAnalogSchmittTrigger()
+        self.scheduler = context.getScheduler()
 
         self.prioEssLoading = False
         self.chargeCurrent = 0
@@ -38,6 +39,7 @@ class PVSurPlusCharge(Charge):
     def setup(self) -> None:
 
         self.model.setup()
+        self.scheduler.scheduleEach(self.loop, 1000)
 
     def loop(self) -> None:
         if self.model.isModelConsistent():
@@ -53,44 +55,44 @@ class PVSurPlusCharge(Charge):
         self.mqttClient.publish('data/PVSurPlusCharge/controllerStateName', self.controllerState.name)
         self.mqttClient.publish('data/PVSurPlusCharge/controllerState', self.controllerState.value)
         self.mqttClient.publish('data/PVSurPlusCharge/availablePowerForCharging', self.model.calcAvailablePower())
+        self.mqttClient.publish('data/PVSurPlusCharge/isModelConsistent', self.model.isModelConsistent())
+        self.mqttClient.publish('data/PVSurPlusCharge/isModelConsistent/why', self.model.whyIsModelConsistent())
 
     def __control(self) -> None:
-        prioEssLoading = self.model.getSoc() < ESS_ACCU_THRESHOLD_PROZ
+        self.prioEssLoading = self.model.getSoc() < ESS_ACCU_THRESHOLD_PROZ
 
         # prioEssLoading: Limit chargeCurrent to this.switchOnCurrent
         # !prioEssLoading (Car-Loading): as much as available
 
         availablePowerForCharging = self.model.calcAvailablePower()
         availableCurrentForCharging = (availablePowerForCharging / NR_PHASES) / V_GRID
-        finalCalculatedCurrentForCharging = self.__calcChargeCurrent(prioEssLoading, availableCurrentForCharging)
-        chargeCurrent = 0
+        finalCalculatedCurrentForCharging = self.__calcChargeCurrent(self.prioEssLoading, availableCurrentForCharging)
+        self.chargeCurrent = self.schmittTrigger.getFilteredValue(finalCalculatedCurrentForCharging)
 
-        if availablePowerForCharging > 0:
+        if not availablePowerForCharging > 0:
+            # No charging
+            self.controllerState = ControllerState.SwitchIntoIdle
 
-            # We have additional power available. Do charging
+        match(self.controllerState):
 
-            if self.controllerState == ControllerState.SwitchIntoIdle:
+            case  ControllerState.SwitchIntoIdle:
                 self.controllerState = ControllerState.Idle
-            # falls through
 
-            elif self.controllerState == ControllerState.Idle:
-
-                if self.model.getStatus() != GoEchargerCarStatus.Unknown:
+            case  ControllerState.Idle:
+                if self.model.getEgoChargerCarStatus() != GoEchargerCarStatus.Unknown:
 
                     # we have to reach switchOnCurrent
                     if availableCurrentForCharging >= SWITCH_ON_CURRENT:
 
                         self.controllerState = ControllerState.WaitTillChargingStarts
-                        chargeCurrent = self.schmittTrigger.getFilteredValue(finalCalculatedCurrentForCharging)
 
-            elif self.controllerState == ControllerState.WaitTillChargingStarts:
-                if self.model.getStatus() == GoEchargerCarStatus.Charging:
+            case  ControllerState.WaitTillChargingStarts:
+                if self.model.getEgoChargerCarStatus() == GoEchargerCarStatus.Charging:
                     self.controllerState = ControllerState.Charging
 
-            elif self.controllerState == ControllerState.Charging:
-
+            case  ControllerState.Charging:
                 # If status of wallbox is not in charging state anymore
-                if self.model.getStatus() != GoEchargerCarStatus.Charging:
+                if self.model.getEgoChargerCarStatus() != GoEchargerCarStatus.Charging:
                     self.controllerState = ControllerState.SwitchIntoIdle
 
                 else:
@@ -98,13 +100,13 @@ class PVSurPlusCharge(Charge):
                     if availableCurrentForCharging >= MIN_CURRENT:
 
                         # go on charging with current calculated charging current
-                        chargeCurrent = self.schmittTrigger.getFilteredValue(finalCalculatedCurrentForCharging)
+                        pass
 
                     else:
 
                         # Oh no, we are under minCurrent. Usually we shall stop charging
 
-                        if prioEssLoading:
+                        if self.prioEssLoading:
 
                             # ESS loading has higher priority, stop charging of the car
                             self.controllerState = ControllerState.SwitchIntoIdle
@@ -114,21 +116,17 @@ class PVSurPlusCharge(Charge):
                             # Everything for the car
                             # we are over 80%, we can go on loading with this.minCurrent, even minCurrent is not reached
                             # ESS us discharged
-                            chargeCurrent = max(self.schmittTrigger.getFilteredValue(finalCalculatedCurrentForCharging), MIN_CURRENT)
+                            self.chargeCurrent = max(self.chargeCurrent, MIN_CURRENT)
                             # chargeCurrent =
                             # Math.max(this.piController.updateWithValue(currentEGOChargingPower,
                             # Math.max(finalCalculatedCurrentForCharging, this.minCurrent),
                             # this.minCurrent)
 
-        else:
-            # No charging
-            self.controllerState = ControllerState.SwitchIntoIdle
+            case  ControllerState.Finished:
+                pass
 
         # Rounding and converting to integer values
-        chargeCurrent = round(min(chargeCurrent, AMP_MAX))
-
-        self.prioEssLoading = prioEssLoading
-        self.chargeCurrent = chargeCurrent
+        self.chargeCurrent = round(min(self.chargeCurrent, AMP_MAX))
 
     def __calcChargeCurrent(self, prioEssLoading: bool, availableCurrent: int) -> int:
 
@@ -146,7 +144,8 @@ class PVSurPlusCharge(Charge):
         return min(chargeCurrent, AMP_MAX)
 
     def isCharging(self) -> bool:
-        return (self.controllerState == ControllerState.WaitTillChargingStarts) or (self.controllerState == ControllerState.Charging)
+        return self.controllerState == ControllerState.WaitTillChargingStarts \
+            or self.controllerState == ControllerState.Charging
 
     def getNrPhases(self) -> int:
         return NR_PHASES
