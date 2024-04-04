@@ -24,7 +24,7 @@ class TimeCharge:
 
     def loop(self) -> None:
         self.mqttClient.publish('data/TimeCharge/isCharging', self.doCharging)
-        self.mqttClient.publish('data/TimeCharge/Time', datetime.now().strptime(self.startTime, INPUT_FORMAT))
+        self.mqttClient.publish('data/TimeCharge/Time', datetime.now().strftime(INPUT_FORMAT))
         self.mqttClient.publish('data/TimeCharge/Current', self.current)
         self.mqttClient.publish('data/TimeCharge/NrPhases', self.nrPhases)
         self.mqttClient.publish('data/TimeCharge/StartTime', self.startTime)
