@@ -102,7 +102,7 @@ class ChargeControl:
                                                                 self.__phaseSwitchStr(charger.getNrPhases()))
                 self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/Ampere',
                                                                 str(int(charger.getCurrent())))
-                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'Off')
+                self.mqttClient.publishOnChangeIndependentTopic('/house/agents/eGoCharger/control/ForceState[Neutral,Off,On]', 'On')
 
                 self.mqttClient.publishOnChangeIndependentTopic('/house/agents/Ess2Mqtt/control/setWinter[On,Off]', 'On')
 
